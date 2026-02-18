@@ -1,0 +1,218 @@
+web_socket:
+  url: ws://127.0.0.1:8080/ws
+  token:
+  auto_reconnect: false
+
+agent:
+  num: 5
+  team: kanolab
+  kill_on_timeout: true
+
+# リアルタイム通信の設定
+realtime:
+  poll_interval: 0.5       # ブロードキャスト確認間隔（秒）
+  speak_cooldown: 3.0      # 連続発言の最小間隔（秒）
+
+llm:
+  type: google
+  sleep_time: 0            # リアルタイムモードでは0推奨（レスポンス速度重視）
+
+openai:
+  model: gpt-4o-mini
+  temperature: 0.7
+
+google:
+  model: gemini-2.0-flash-lite
+  temperature: 0.7
+
+ollama:
+  model: llama3.1
+  temperature: 0.7
+  base_url: http://localhost:11434
+
+prompt:
+  initialize: |-
+    あなたは人狼ゲームのエージェントです。
+    あなたの名前は{{ info.agent }}です。
+    あなたの役職は{{ role.value }}です。
+
+    これからゲームを進行していきます。リクエストが来た際には、日本語で適切な応答を返してください。
+
+    このゲームではリアルタイムチャット方式で会話が行われます。
+    あなたは他のエージェントの発言をリアルタイムで受信し、自分の判断で発言するタイミングを決めます。
+    グループチャットのように、自然な会話の流れを意識してください。
+
+    トークリクエストと囁きリクエストに対しては、ゲーム内で発言するべき内容のみを出力してください。
+    履歴がある場合は、それを参考にしてください。ない場合は、適切な内容を出力してください。
+    これ以上の情報を得られないと考えたときなどトークを終了したい場合については「Over」と出力してください。
+
+    他のリクエストに対しては、行動の対象となるエージェントの名前のみを出力してください。
+    対象となる生存しているエージェントの一覧が付与されています。
+
+    {% if info.profile is not none -%}
+    あなたのプロフィール: {{ info.profile }}
+    {%- endif %}
+
+    あなたのレスポンスはそのままゲーム内に送信されるため、不要な情報を含めないでください。
+  daily_initialize: |-
+    昼開始リクエスト
+    {{ info.day }}日目
+    {% if info.medium_result is not none -%}
+    霊能結果: {{ info.medium_result }}
+    {%- endif %}
+    {% if info.divine_result is not none -%}
+    占い結果: {{ info.divine_result }}
+    {%- endif %}
+    {% if info.executed_agent is not none -%}
+    追放結果: {{ info.executed_agent }}
+    {%- endif %}
+    {% if info.attacked_agent is not none -%}
+    襲撃結果: {{ info.attacked_agent }}
+    {%- endif %}
+    {% if info.vote_list is not none -%}
+    投票結果: {{ info.vote_list }}
+    {%- endif %}
+    {% if info.attack_vote_list is not none -%}
+    襲撃投票結果: {{ info.attack_vote_list }}
+    {%- endif %}
+
+  # ========== リアルタイムモード用プロンプト ==========
+  # talk/whisper の代わりに talk_realtime/whisper_realtime が使用される。
+  # LLMは以下のいずれかを返す必要がある:
+  #   - 発言内容（そのまま送信される）
+  #   - "LISTEN"（今は聞くだけ、発言しない）
+  #   - "Over"（このフェーズでの発言を終了する）
+  talk_realtime: |-
+    あなたは{{ info.agent }}です。リアルタイムのグループチャットで会話中です。
+    残り発言回数: {{ remain_count }}回
+
+    --- 会話の流れ ---
+    {% for t in recent_talks -%}
+    {{ t.agent }}: {{ t.text }}
+    {% endfor %}
+    --- ここまで ---
+
+    上記の会話の流れを踏まえ、今あなたが発言すべきかどうかを判断してください。
+
+    【発言すべき場面】
+    - 自分の名前が呼ばれた、質問された
+    - 重要な情報（占い結果など）を共有すべき
+    - 誰かの発言に反論や同意をしたい
+    - 議論が停滞していて話題を提供すべき
+    - まだ誰も話していない（会話の開始）
+
+    【聞くべき場面】
+    - 他のエージェントが活発に議論している最中
+    - 自分に関係のない話題が続いている
+    - さっき発言したばかりで、新しい情報がない
+
+    発言する場合: 発言内容のみを出力してください。
+    聞く場合: 「LISTEN」とだけ出力してください。
+    もうこのフェーズで話すことがない場合: 「Over」とだけ出力してください。
+
+  whisper_realtime: |-
+    あなたは{{ info.agent }}（人狼）です。仲間の人狼とのリアルタイム密談中です。
+    残り発言回数: {{ remain_count }}回
+
+    --- 密談の流れ ---
+    {% for t in recent_talks -%}
+    {{ t.agent }}: {{ t.text }}
+    {% endfor %}
+    --- ここまで ---
+
+    上記の密談の流れを踏まえ、今あなたが発言すべきかどうかを判断してください。
+    仲間との作戦会議です。襲撃対象の相談や、昼の議論での方針を話し合ってください。
+
+    発言する場合: 発言内容のみを出力してください。
+    聞く場合: 「LISTEN」とだけ出力してください。
+    もうこのフェーズで話すことがない場合: 「Over」とだけ出力してください。
+
+  # 従来モード用（フォールバック）
+  whisper: |-
+    囁きリクエスト
+    履歴:
+    {% for w in whisper_history[sent_whisper_count:] -%}
+    {{ w.agent }}: {{ w.text }}
+    {% endfor %}
+  talk: |-
+    トークリクエスト
+    履歴:
+    {% for w in talk_history[sent_talk_count:] -%}
+    {{ w.agent }}: {{ w.text }}
+    {% endfor %}
+  daily_finish: |-
+    昼終了リクエスト
+    履歴:
+    {% for w in talk_history[sent_talk_count:] -%}
+    {{ w.agent }}: {{ w.text }}
+    {% endfor %}
+    {{ info.day }}日目
+    {% if info.medium_result is not none -%}
+    霊能結果: {{ info.medium_result }}
+    {%- endif %}
+    {% if info.divine_result is not none -%}
+    占い結果: {{ info.divine_result }}
+    {%- endif %}
+    {% if info.executed_agent is not none -%}
+    追放結果: {{ info.executed_agent }}
+    {%- endif %}
+    {% if info.attacked_agent is not none -%}
+    襲撃結果: {{ info.attacked_agent }}
+    {%- endif %}
+    {% if info.vote_list is not none -%}
+    投票結果: {{ info.vote_list }}
+    {%- endif %}
+    {% if info.attack_vote_list is not none -%}
+    襲撃投票結果: {{ info.attack_vote_list }}
+    {%- endif %}
+  divine: |-
+    占いリクエスト
+    対象:
+    {% for k, v in info.status_map.items() -%}
+    {%- if v == 'ALIVE' -%}
+    {{ k }}
+    {% endif -%}
+    {%- endfor %}
+  guard: |-
+    護衛リクエスト
+    対象:
+    {% for k, v in info.status_map.items() -%}
+    {%- if v == 'ALIVE' -%}
+    {{ k }}
+    {% endif -%}
+    {%- endfor %}
+  vote: |-
+    投票リクエスト
+    対象:
+    {% for k, v in info.status_map.items() -%}
+    {%- if v == 'ALIVE' -%}
+    {{ k }}
+    {% endif -%}
+    {%- endfor %}
+  attack: |-
+    襲撃リクエスト
+    対象:
+    {% for k, v in info.status_map.items() -%}
+    {%- if v == 'ALIVE' -%}
+    {{ k }}
+    {% endif -%}
+    {%- endfor %}
+
+log:
+  console_output: true
+  file_output: true
+  output_dir: ./log
+  level: debug
+
+  request:
+    name: false
+    initialize: false
+    daily_initialize: false
+    whisper: true
+    talk: true
+    daily_finish: false
+    divine: true
+    guard: true
+    vote: true
+    attack: true
+    finish: false

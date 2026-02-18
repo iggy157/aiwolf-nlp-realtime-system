@@ -1,0 +1,38 @@
+services:
+  server:
+    build:
+      context: ./aiwolf-nlp-server
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./docker/server.realtime_5.yml:/app/config/realtime_5.yml:ro
+      - server-log:/app/log
+    restart: unless-stopped
+
+  agent:
+    build:
+      context: .
+      dockerfile: aiwolf-nlp-agent-llm/Dockerfile
+    depends_on:
+      - server
+    env_file:
+      - .env
+    volumes:
+      - ./docker/agent.yml:/app/config/config.yml:ro
+      - agent-log:/app/log
+    profiles:
+      - with-agent
+
+  viewer:
+    build:
+      context: ./aiwolf-nlp-viewer
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./aiwolf-nlp-viewer/src:/app/src
+      - ./aiwolf-nlp-viewer/static:/app/static
+    restart: unless-stopped
+
+volumes:
+  server-log:
+  agent-log:

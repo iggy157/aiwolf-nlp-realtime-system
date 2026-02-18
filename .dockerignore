@@ -1,0 +1,17 @@
+# Agent Dockerfile uses root context
+aiwolf-nlp-server/
+aiwolf-nlp-viewer/
+docker/
+.git
+*.md
+docker-compose.yml
+.env.example
+
+# Python
+aiwolf-nlp-agent-llm/.venv/
+aiwolf-nlp-agent-llm/log/
+aiwolf-nlp-agent-llm/.git
+aiwolf-nlp-common/.venv/
+aiwolf-nlp-common/.git
+__pycache__/
+*.pyc
