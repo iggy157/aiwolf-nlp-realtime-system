@@ -33,22 +33,53 @@ realtime_system/
 
 Docker を使うと Go / Python / Node.js の個別インストールが不要になる。
 
-### クイックスタート
+### クイックスタート A: ビューアから操作（推奨）
+
+ビューアのコントロールパネルでゲーム開始・停止を制御する方法。
 
 ```bash
 # 1. APIキーを設定
 cp .env.example .env
-# .env を編集して使用するプロバイダのキーを設定
+vim .env   # 使用するプロバイダのキーを入力
 
 # 2. サーバとビューアを起動
 docker compose up -d
 
-# 3. エージェントを起動（別途実行）
+# 3. エージェントを起動（別ターミナルで実行）
 docker compose --profile with-agent up agent
 ```
 
-- ビューア: `http://localhost:5173`
-- サーバ: `http://localhost:8080`
+4. ブラウザで `http://localhost:5173/control` を開く
+5. サーバURL `http://localhost:8080` を入力して「接続」
+6. 待機部屋に5人が表示されたら「ゲーム開始」ボタンを押す
+7. `http://localhost:5173/realtime` でゲームをリアルタイム観戦
+
+> Docker 環境ではビューアからのエージェント起動（agent_spawner）は無効。エージェントは手順3の `docker compose` コマンドで起動する。
+
+### クイックスタート B: コマンドのみで操作
+
+ビューアを使わず、ターミナルだけで実行する方法。
+
+```bash
+# 1. APIキーを設定
+cp .env.example .env
+vim .env
+
+# 2. 全サービスを一括起動（サーバ + ビューア + エージェント）
+docker compose --profile with-agent up -d
+
+# 3. ゲームを開始（manual_start: true のためAPIで開始指示を送る）
+#    エージェントがサーバに接続するまで数秒待ってから実行
+curl -X POST http://localhost:8080/api/game/start
+
+# 4. ログでゲーム進行を確認
+docker compose logs -f agent
+
+# 5. 全て停止
+docker compose --profile with-agent down
+```
+
+> `docker/server.realtime_5.yml` で `manual_start: false` に変更すると、エージェントが5人揃った時点でゲームが自動開始される。その場合、手順3の `curl` は不要。
 
 ### ファイル構成
 
@@ -139,6 +170,64 @@ ollama:
 
 Docker を使わずに直接実行する場合の手順。
 
+### クイックスタート A: ビューアから操作（推奨）
+
+ビューアのコントロールパネルからエージェント起動・ゲーム制御をすべて行う方法。ターミナルで起動するのはサーバとビューアだけ。
+
+```bash
+# 1. サーバを起動（ターミナル1）
+cd aiwolf-nlp-server
+go run main.go -c config/realtime_5.yml
+
+# 2. ビューアを起動（ターミナル2）
+cd aiwolf-nlp-viewer
+pnpm install   # 初回のみ
+pnpm dev
+
+# 3. エージェントのAPIキーを設定（初回のみ）
+cd aiwolf-nlp-agent-llm
+cp config/.env.example .env
+vim .env   # 使用するプロバイダのキーを入力
+```
+
+4. ブラウザで `http://localhost:5173/control` を開く
+5. サーバURL `http://localhost:8080` を入力して「接続」
+6. エージェント起動パネルでチーム名・モデルを選択して「起動」（5体分）
+7. 待機部屋に5人が表示されたら「ゲーム開始」ボタンを押す
+8. `http://localhost:5173/realtime` でゲームをリアルタイム観戦
+9. ゲーム中は「一時停止」/「再開」で制御、コスト欄で累積コスト確認
+
+> ビューアからのエージェント起動は `agent_spawner` 機能を使用。`realtime_5.yml` ではデフォルトで有効。
+
+### クイックスタート B: コマンドのみで操作
+
+ビューアを使わず、ターミナルだけで実行する方法。
+
+```bash
+# 1. エージェントのAPIキーを設定（初回のみ）
+cd aiwolf-nlp-agent-llm
+cp config/.env.example .env
+vim .env   # 使用するプロバイダのキーを入力
+
+# 2. サーバを起動（ターミナル1）
+cd aiwolf-nlp-server
+go run main.go -c config/realtime_5.yml
+
+# 3. エージェントを起動（ターミナル2）
+cd aiwolf-nlp-agent-llm
+uv run python src/main.py -c config/config.yml
+
+# 4. ゲームを開始（manual_start: true のためAPIで開始指示を送る）
+#    エージェントがサーバに接続するまで数秒待ってから実行
+curl -X POST http://localhost:8080/api/game/start
+
+# 5. ゲーム進行はエージェントのターミナルログで確認
+```
+
+> `realtime_5.yml` で `manual_start: false` に変更すると、エージェントが5人揃った時点でゲームが自動開始される。その場合、手順4の `curl` は不要。
+
+> ビューアは任意。観戦したい場合はビューアも起動して `http://localhost:5173/realtime` にアクセスする。
+
 ### 設定ファイル
 
 `aiwolf-nlp-server/config/` 配下に設定ファイルがある。
@@ -156,60 +245,6 @@ Docker を使わずに直接実行する場合の手順。
 - ビューアからのエージェント起動（`agent_spawner`）
 
 追加の設定変更なしでそのまま使える。
-
-### サーバ起動コマンド
-
-```bash
-cd aiwolf-nlp-server
-go run main.go -c config/realtime_5.yml
-```
-
-サーバが `http://127.0.0.1:8080` で起動する。
-
-### エージェントのAPIキー設定
-
-```bash
-cd aiwolf-nlp-agent-llm
-cp config/.env.example .env
-```
-
-`.env` を編集:
-
-```
-GOOGLE_API_KEY=AIza...
-```
-
-デフォルトでは Google Gemini (`gemini-2.0-flash-lite`) を使用する。OpenAI や Ollama を使う場合の変更方法は後述。
-
-### エージェント起動コマンド
-
-```bash
-cd aiwolf-nlp-agent-llm
-uv run python src/main.py -c config/config.yml
-```
-
-ビューアのコントロールパネルからエージェントを起動する場合は、このコマンドは不要（サーバの spawner が自動で実行する）。
-
-### ビューアの起動
-
-```bash
-cd aiwolf-nlp-viewer
-pnpm install
-pnpm dev
-```
-
-`http://localhost:5173` でアクセスできる。
-
----
-
-## ゲームの実行（ビューアから操作）
-
-1. ブラウザで `http://localhost:5173/control` にアクセス
-2. サーバURL（`http://localhost:8080`）を入力して「接続」
-3. エージェント起動パネルでチーム名・モデルを選択して「起動」
-4. 待機部屋に5人揃ったら「ゲーム開始」
-5. ゲーム中は「一時停止」/「再開」で制御、コスト欄で累積コスト確認
-6. ゲーム終了後、コスト集計テーブルで最終結果を確認
 
 ### ビューアの各ページ
 
