@@ -1,9 +1,0 @@
-{
-    "recommendations": [
-        "mikestead.dotenv",
-        "ms-python.debugpy",
-        "ms-python.python",
-        "ms-python.vscode-pylance",
-        "wholroyd.jinja",
-    ]
-}
