@@ -5,8 +5,9 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - ./docker/server.realtime_5.yml:/app/config/realtime_5.yml:ro
+      - ./${SERVER_CONFIG:-docker/server.realtime_5.yml}:/app/config/game.yml:ro
       - server-log:/app/log
+    command: ["./aiwolf-nlp-server", "-c", "config/game.yml"]
     restart: unless-stopped
 
   agent:
@@ -18,7 +19,7 @@ services:
     env_file:
       - .env
     volumes:
-      - ./docker/agent.yml:/app/config/config.yml:ro
+      - ./${AGENT_CONFIG:-docker/agent.yml}:/app/config/config.yml:ro
       - agent-log:/app/log
     profiles:
       - with-agent
